@@ -22,12 +22,13 @@ const PWD = "home"
 const DB = "test"
 
 
-func _verifyConnecton() {
+func verifyConnecton() bool {
 	db, err := sql.Open(CLIENT, USER + ":" + PWD + "@/" + DB)
 	defer db.Close()
 
 	if (err != nil) {
 		log.Fatal("Error connecting database.")
+		return false
 	}
 
 	var version string
@@ -38,9 +39,10 @@ func _verifyConnecton() {
 	}
 
 	fmt.Println("Mysql version is ", version)
+	return true
 }
 
-func _insertStudent(newStudent *student) {
+func insertStudent(newStudent *student) {
 	fmt.Println((*newStudent).name)
 	fmt.Println((*newStudent).age)
 	fmt.Println((*newStudent).percentage)
@@ -92,27 +94,198 @@ func fetchStudent(name string) []student {
 	
 	var students []student
 	rows, err := db.Query(fetchQuery)
-	for rows.Next() {
-		var s student
-		fmt.Scan(&s.id, &s.name, &s.age, &s.percentage)
-		students = append(students, s)
+	if err != nil {
+		log.Fatal("Query executed with errors!")
+	} else {
+		for rows.Next() {
+			// var s student
+			var name string
+			var id int
+			var percentage float32
+			var age byte
+			rows.Scan(&id, &name, &age, &percentage)
+			students = append(students, student{id, name, age, percentage})
+		}
 	}
-
-	fmt.Println(students)
 	return students
 }
 
-func main() {
-	// _verifyConnecton()
-	// var newStudent student
-	// fmt.Print("Enter student name, age and percentage respectively: ")
-	// fmt.Scan(&newStudent.name, &newStudent.age, &newStudent.percentage)
-	// insertStudent(&newStudent)
+func fetchStudents() []student {
+	db, err := sql.Open(CLIENT, fmt.Sprintf("%s:%s@/%s", USER, PWD, DB))
+	defer db.Close()
 
-	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Print("Enter student name: ")
-	scanner.Scan()
-	name := scanner.Text()
-	fetchStudent(name)
+	if err != nil {
+		log.Fatal("Error connecting database!")
+	}
+
+	fetchQuery := fmt.Sprintf("SELECT Id, Name, Age, Percentage FROM Student") 
+	fmt.Println(fetchQuery)
+	
+	var students []student
+	rows, err := db.Query(fetchQuery)
+	if err != nil {
+		log.Fatal("Query executed with errors!")
+	} else {
+		for rows.Next() {
+			var name string
+			var id int
+			var percentage float32
+			var age byte
+			rows.Scan(&id, &name, &age, &percentage)
+			students = append(students, student{id, name, age, percentage})
+		}
+	}
+	return students
+}
+
+func updateStudent(updatedStudent *student) {
+	db, err := sql.Open(CLIENT, fmt.Sprintf("%s:%s@/%s", USER, PWD, DB))
+	if err != nil {
+		log.Fatal("Error connecting database!")
+		return
+	}
+
+	updateQuery := fmt.Sprintf("UPDATE Student SET name='%s', age=%d, percentage=%f WHERE id=%d", (*updatedStudent).name, (*updatedStudent).age, (*updatedStudent).percentage, (*updatedStudent).id)
+	res, err := db.Exec(updateQuery)
+
+	if err != nil {
+		log.Fatal("Query executed with errors!")
+		return
+	}
+
+	if rows, _ := res.RowsAffected(); rows == 1 {
+		fmt.Println("Student updated.")
+	}
+}
+
+func deleteStudent(id int) {
+	db, err := sql.Open(CLIENT, fmt.Sprintf("%s:%s@/%s", USER, PWD, DB))
+	if err != nil {
+		log.Fatal("Error connecting database!")
+		return
+	}
+
+	updateQuery := fmt.Sprintf("DELETE FROM Student WHERE id=%d", id)
+	res, err := db.Exec(updateQuery)
+
+	if err != nil {
+		log.Fatal("Query executed with errors!")
+		return
+	}
+
+	if rows, _ := res.RowsAffected(); rows == 1 {
+		fmt.Println("Student deleted.")
+	}
+}
+
+func showStudentsForUpdateAndDelete(students []student) int {
+	fmt.Println("ID\tNAME\tAGE\tPERCENTAGE")
+	for _, s := range(students) {
+		fmt.Printf("%d\t%s\t%d\t%f\n", s.id, s.name, s.age, s.percentage)
+	}
+
+	var id int
+	fmt.Print("Select any one student id displayed above: ")
+	fmt.Scanln(&id)
+
+	var fail bool = false
+	for _, s := range(students) {
+		if id != s.id {
+			fail = true
+		}
+	}
+	if fail {
+		fmt.Println("Invalid id")
+		return -1
+	}
+
+	return id
+}
+
+
+func main() {
+	var choice int8
+	for {
+		if(!verifyConnecton()) {
+			fmt.Println("Couldn't reach database server!")
+			return
+		}
+		fmt.Println("Select any one of the following")
+		fmt.Println("1. Add a student")
+		fmt.Println("2. Display all students")
+		fmt.Println("3. Search student")
+		fmt.Println("4. Update student")
+		fmt.Println("5. Delete student")
+		fmt.Println("6. Exit")
+		fmt.Scanln(&choice)
+
+		switch choice {
+		case 1:
+			var newStudent student
+			fmt.Print("Enter student name, age and percentage respectively: ")
+			fmt.Scan(&newStudent.name, &newStudent.age, &newStudent.percentage)
+			insertStudent(&newStudent)
+		
+		case 2:
+			students := fetchStudents()
+			if len(students) > 0 {
+				fmt.Println("ID\tNAME\tAGE\tPERCENTAGE")
+				for _, s := range(students) {
+					fmt.Printf("%d\t%s\t%d\t%.2f\n", s.id, s.name, s.age, s.percentage)
+				}
+			} else {
+				fmt.Println("No data!")
+			}
+		case 3:
+			scanner := bufio.NewScanner(os.Stdin)
+			fmt.Print("Enter student name: ")
+			scanner.Scan()
+			name := scanner.Text()
+			students := fetchStudent(name)
+			if len(students) > 0 {
+				fmt.Println("ID\tNAME\tAGE\tPERCENTAGE")
+				for _, s := range(students) {
+					fmt.Printf("%d\t%s\t%d\t%f\n", s.id, s.name, s.age, s.percentage)
+				}
+			} else {
+				fmt.Println("No data!")
+			}
+		case 4:
+			scanner := bufio.NewScanner(os.Stdin)
+			fmt.Print("Enter student name: ")
+			scanner.Scan()
+			name := scanner.Text()
+			students := fetchStudent(name)
+			if len(students) > 0 {
+				id := showStudentsForUpdateAndDelete(students)
+				if id > 0 {
+					var newStudent student
+					fmt.Print("Enter student name, age and percentage respectively: ")
+					fmt.Scanln(&newStudent.name, &newStudent.age, &newStudent.percentage)
+					newStudent.id = id
+					updateStudent(&newStudent)
+				}
+			} else {
+				fmt.Println("No data!")
+			}
+
+		case 5:
+			scanner := bufio.NewScanner(os.Stdin)
+			fmt.Print("Enter student name: ")
+			scanner.Scan()
+			name := scanner.Text()
+			students := fetchStudent(name)
+			if len(students) > 0 {
+				id := showStudentsForUpdateAndDelete(students)
+				if id > 0 {
+					deleteStudent(id)
+				}
+			} else {
+				fmt.Println("No data!")
+			}
+		default: return
+		}
+	}
+
 }
 
